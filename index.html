@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CheckOut.io — шашки онлайн (без загрузки)</title>
+
+<!-- Tailwind CDN (опционально влияет на внешний вид, но основная стилизация в <style>) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- PeerJS CDN -->
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+<style>
+  /* ===== Стили — деревенский / деревянный стиль ===== */
+  :root{
+    --wood-dark:#6b3e1a;
+    --wood-light:#d6a571;
+    --muted:#6b7280;
+    --rounded:14px;
+    --card-shadow: 0 12px 30px rgba(15,23,42,0.10);
+    --accent:#4f46e5;
+    --accent-2:#7c3aed;
+  }
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family: Inter, "Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: linear-gradient(180deg,#efe7d1 0%, #f6f2ea 100%);
+    color:#111827;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .wrap { max-width:1200px; margin:14px auto; padding:16px; display:flex; gap:18px; }
+  .sidebar { width:260px; display:flex; flex-direction:column; gap:12px; }
+  .main { flex:1; display:flex; flex-direction:column; gap:12px; }
+
+  .wood-panel { background: linear-gradient(180deg,var(--wood-dark), #7d4a2c); color:#fff; border-radius:12px; padding:12px; box-shadow: var(--card-shadow); }
+  .panel-light { background: linear-gradient(180deg,#fffaf6,#f3e6d0); border-radius:12px; padding:12px; box-shadow: var(--card-shadow); }
+
+  .tab { display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px; cursor:pointer; transition:all .14s ease; background: linear-gradient(180deg, rgba(0,0,0,0.02), transparent); border:1px solid rgba(0,0,0,0.04); }
+  .tab.active { background: linear-gradient(180deg,#fff6eb,#efe0c8); color:var(--wood-dark); box-shadow: 0 10px 28px rgba(0,0,0,0.08); transform: translateX(6px); }
+
+  .wood-btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; background: linear-gradient(180deg,#8b5a36,#6b3e1a); color:#fff; border:none; cursor:pointer; font-weight:800; box-shadow:0 12px 28px rgba(0,0,0,0.16);}
+  .wood-ghost{ background:linear-gradient(180deg,#fffaf6,#f3e6d0); color:var(--wood-dark); border:1px solid rgba(0,0,0,0.06); }
+
+  .board-wrap { border-radius:16px; padding:14px; background: linear-gradient(180deg,#edd7b6,#d7b089); box-shadow: var(--card-shadow); }
+  .checkers-board { display:grid; grid-template-columns: repeat(8, 1fr); gap:8px; width:min(720px,86vw); aspect-ratio:1/1; padding:12px; border-radius:12px; background: linear-gradient(180deg,#cfa67a,#b88455); }
+  .square{ position:relative; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:default; user-select:none; overflow:hidden; transition: transform .12s ease; }
+  .square.light{ background:linear-gradient(180deg,#f9e6cd,#f1d2a7); }
+  .square.dark{ background:linear-gradient(180deg,#a2673b,#8b4f2b); }
+  .square:hover{ transform: translateY(-4px); }
+  .piece{ width:72%; height:72%; border-radius:999px; display:flex; align-items:center; justify-content:center; font-weight:800; transition: transform .25s, box-shadow .25s; }
+  .piece.white{ color:#0f172a; border:2px solid rgba(255,255,255,0.9); }
+  .piece.black{ color:#fff; border:2px solid rgba(0,0,0,0.12); }
+  .piece.king{ box-shadow: 0 16px 40px rgba(0,0,0,0.22), inset 0 -8px 12px rgba(0,0,0,0.06); }
+
+  .move-dot{ position:absolute; width:16px; height:16px; border-radius:999px; background:rgba(255,255,255,0.85); box-shadow:0 4px 10px rgba(0,0,0,0.15); }
+
+  .shop-grid{ display:grid; grid-template-columns: repeat(2,1fr); gap:12px; max-height:420px; overflow:auto; padding-right:6px; }
+  .skin-card{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:8px; border-radius:10px; background:linear-gradient(180deg,#fff8f1,#fff1e0); border:1px solid rgba(0,0,0,0.04); }
+  .skin-preview{ width:72px; height:48px; border-radius:8px; border:1px solid rgba(0,0,0,0.06); display:flex; align-items:center; justify-content:center; font-weight:800; color:#222; box-shadow: inset 0 -6px 18px rgba(0,0,0,0.04); }
+
+  .rarity { padding:6px 8px; border-radius:999px; font-weight:800; font-size:12px; color:#fff; }
+  .rar-Common{ background:#8b5a36; } .rar-Rare{ background:#2b6cb0; } .rar-Epic{ background:#7c3aed; } .rar-Ultra{ background:#d69e2e; } .rar-Mythic{ background:#1f7a6b; } .rar-Legend{ background:#d946ef; } .rar-Elite{ background:#f97316; }
+
+  .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .balance { background:linear-gradient(180deg,#fffaf6,#f3e6d0); padding:8px 12px; border-radius:999px; display:flex; gap:8px; align-items:center; border:1px solid rgba(0,0,0,0.04); box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
+  .nick-frame { background:linear-gradient(180deg,#fff6ed,#ffe8c8); padding:8px 12px; border-radius:999px; border:1px solid rgba(0,0,0,0.04); font-weight:800; }
+  .dollar-icon{ width:20px; height:20px; border-radius:8px; background:linear-gradient(180deg,var(--accent),var(--accent-2)); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:12px; }
+
+  .rounded-input{ padding:8px 10px; border-radius:10px; border:1px solid rgba(0,0,0,0.06); }
+
+  .clover { background:linear-gradient(180deg,#dff8ef,#bfeee0); padding:8px 12px; border-radius:999px; font-weight:800; color:#0f5132; box-shadow: var(--card-shadow); }
+
+  @media (max-width:980px){
+    .wrap{ flex-direction:column; padding:12px; }
+    .sidebar{ width:100%; flex-direction:row; gap:8px; overflow:auto; }
+    .shop-grid{ grid-template-columns: repeat(1,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="wood-panel">
+      <div style="font-weight:900;font-size:18px;">CheckOut.io</div>
+      <div style="font-size:12px;">Деревня • Доски • Гвозди</div>
+      <div style="height:10px;"></div>
+
+      <div id="tabBattle" class="tab active" data-tab="battle">
+        <svg viewBox="0 0 24 24" fill="none" style="width:28px;height:28px"><path d="M3 21l6-6" stroke="#4b2e12" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div><div style="font-weight:900">Битва</div><div style="font-size:12px;color:rgba(255,255,255,0.85)">Онлайн / Офлайн</div></div>
+      </div>
+
+      <div id="tabShop" class="tab" data-tab="shop">
+        <svg viewBox="0 0 24 24" fill="none" style="width:28px;height:28px"><rect x="3" y="7" width="18" height="13" rx="2" stroke="#4b2e12" stroke-width="1.6"/></svg>
+        <div><div style="font-weight:900">Магазин</div><div style="font-size:12px;color:rgba(255,255,255,0.85)">Купи скины</div></div>
+      </div>
+
+      <div id="tabInv" class="tab" data-tab="inv">
+        <svg viewBox="0 0 24 24" fill="none" style="width:28px;height:28px"><path d="M12 3v18" stroke="#4b2e12" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="#4b2e12" stroke-width="1.6"/></svg>
+        <div><div style="font-weight:900">Скины</div><div style="font-size:12px;color:rgba(255,255,255,0.85)">Инвентарь</div></div>
+      </div>
+
+      <div style="height:12px"></div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.95);font-weight:800">v1.1 • By Ilnitsky</div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="balance"><div class="dollar-icon">$</div><div style="font-weight:800">Баланс</div><div id="balanceVal" style="font-weight:900;padding-left:6px">$0.00</div></div>
+        <div class="nick-frame">Ник: <span id="nickText">—</span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center"><button id="settingsBtn" class="wood-btn wood-ghost">⚙ Настройки</button></div>
+    </div>
+
+    <div id="contentArea">
+      <!-- Battle pane -->
+      <div id="pane-battle">
+        <div class="panel-light" style="padding:14px;border-radius:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:900;font-size:18px">Битва</div>
+              <div style="font-size:13px;color:var(--muted)">Выбери режим: Офлайн (бот) или Онлайн (комната)</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button id="btnOffline" class="wood-btn">Офлайн</button>
+              <button id="btnOnline" class="wood-btn wood-ghost">Онлайн</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="onlineControls" class="panel-light" style="margin-top:12px;display:none;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button id="createRoom" class="wood-btn">Создать комнату</button>
+            <input id="roomInput" class="rounded-input" placeholder="ID комнаты или ссылка ?room=" style="min-width:260px" />
+            <button id="joinRoom" class="wood-btn wood-ghost">Присоединиться</button>
+            <button id="copyLinkBtn" class="wood-btn wood-ghost">📋</button>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <div style="font-size:13px;color:var(--muted)">Статус: <span id="onlineStatus">—</span></div>
+            <div style="font-size:13px;color:var(--muted)">Local Peer ID: <span id="peerId">—</span></div>
+          </div>
+        </div>
+
+        <div class="board-wrap" style="margin-top:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-weight:900;font-size:16px">Поле</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="resetBtn" class="wood-btn wood-ghost">Сброс</button>
+              <div style="font-size:14px;color:var(--muted)">Ход: <span id="turn">—</span></div>
+            </div>
+          </div>
+          <div class="checkers-board" id="board"></div>
+        </div>
+      </div>
+
+      <!-- Shop -->
+      <div id="pane-shop" style="display:none;margin-top:8px;">
+        <div class="panel-light" style="padding:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-weight:900;font-size:18px">Магазин</div>
+            <div style="font-size:13px;color:var(--muted)">Редкости влияют на эффекты</div>
+          </div>
+          <div class="shop-grid" id="shopGrid"></div>
+        </div>
+      </div>
+
+      <!-- Inventory -->
+      <div id="pane-inv" style="display:none;margin-top:8px;">
+        <div class="panel-light" style="padding:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-weight:900;font-size:18px">Инвентарь</div>
+            <div style="font-size:13px;color:var(--muted)">Применяй скины — видны противнику</div>
+          </div>
+          <div id="invList" class="shop-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-weight:900">CheckOut.io — Деревенская эстетика</div>
+      <div class="clover">1.1 updt • By Ilnitsky</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== CheckOut.io — рабочая версия без загрузочного экрана =====
+   - На первой загрузке запрашивает ник (prompt)
+   - Офлайн с ботом
+   - Онлайн через PeerJS: ?room=<peerId> — копируешь ссылку и отправляешь
+   - Магазин/инвентарь работают локально (localStorage)
+   - Хост валидирует ходы
+*/
+
+(function(){
+  const $ = sel => document.querySelector(sel);
+
+  // State
+  const STATE = {
+    board: null,
+    turn: 'white',
+    selected: null,
+    moves: [],
+    peer: null,
+    conn: null,
+    peerId: null,
+    role: 'host',
+    nick: null,
+    balance: 100.00,
+    owned: new Set(),
+    activeSkin: null,
+    skins: [],
+    localSkinMap: {},
+    currency: '$'
+  };
+
+  // Rarities and generate 50 skins
+  const RARITIES = [
+    {key:'Common', label:'Обычный', class:'rar-Common', base:0},
+    {key:'Rare', label:'Редкий', class:'rar-Rare', base:5},
+    {key:'Epic', label:'Эпический', class:'rar-Epic', base:12},
+    {key:'Ultra', label:'Ультраредкий', class:'rar-Ultra', base:30},
+    {key:'Mythic', label:'Мифический', class:'rar-Mythic', base:60},
+    {key:'Legend', label:'Легендарный', class:'rar-Legend', base:120},
+    {key:'Elite', label:'Элитный', class:'rar-Elite', base:250}
+  ];
+
+  function generateSkins(){
+    const skins = [];
+    for(let i=0;i<50;i++){
+      let rarity;
+      if(i < 20) rarity = RARITIES[0];
+      else if(i < 32) rarity = RARITIES[1];
+      else if(i < 40) rarity = RARITIES[2];
+      else if(i < 44) rarity = RARITIES[3];
+      else if(i < 47) rarity = RARITIES[4];
+      else if(i < 49) rarity = RARITIES[5];
+      else rarity = RARITIES[6];
+
+      const price = Math.round((rarity.base + (i % 7) * (rarity.base ? 0.5 : 0)) * 10) / 10;
+      const hue1 = (i*31) % 360, hue2 = (i*19) % 360;
+      const preview = `linear-gradient(135deg, hsl(${hue1} 60% 88%), hsl(${hue2} 50% 66%))`;
+      const effect = (rarity.key === 'Common') ? 'static' :
+                     (rarity.key === 'Rare') ? 'glow' :
+                     (rarity.key === 'Epic') ? 'glow-trail' :
+                     (rarity.key === 'Ultra') ? 'sparkle' :
+                     (rarity.key === 'Mythic') ? 'golden-trail' :
+                     (rarity.key === 'Legend') ? 'royal' : 'ethereal';
+
+      skins.push({
+        id: 'skin_' + i,
+        name: `Узор ${i+1}`,
+        price,
+        rarity: rarity.key,
+        rarityLabel: rarity.label,
+        rarityClass: rarity.class,
+        preview,
+        effect
+      });
+    }
+    return skins;
+  }
+  STATE.skins = generateSkins();
+
+  // Persistence
+  const STORE = 'checkoutio_v1';
+  function saveLocal(){
+    try{
+      localStorage.setItem(STORE, JSON.stringify({
+        nick: STATE.nick, balance: STATE.balance, owned: Array.from(STATE.owned),
+        activeSkin: STATE.activeSkin, localSkinMap: STATE.localSkinMap
+      }));
+    }catch(e){}
+  }
+  function loadLocal(){
+    try{
+      const raw = localStorage.getItem(STORE);
+      if(!raw) return;
+      const o = JSON.parse(raw);
+      if(o.nick) STATE.nick = o.nick;
+      if(o.balance !== undefined) STATE.balance = o.balance;
+      if(Array.isArray(o.owned)) STATE.owned = new Set(o.owned);
+      if(o.activeSkin) STATE.activeSkin = o.activeSkin;
+      if(o.localSkinMap) STATE.localSkinMap = o.localSkinMap;
+    }catch(e){}
+  }
+  loadLocal();
+
+  // References
+  const nickText = $('#nickText'), balanceVal = $('#balanceVal');
+  const tabBattle = $('#tabBattle'), tabShop = $('#tabShop'), tabInv = $('#tabInv');
+  const paneBattle = $('#pane-battle'), paneShop = $('#pane-shop'), paneInv = $('#pane-inv');
+  const btnOffline = $('#btnOffline'), btnOnline = $('#btnOnline');
+  const onlineControls = $('#onlineControls'), createRoomBtn = $('#createRoom'), joinRoomBtn = $('#joinRoom'), copyLinkBtn = $('#copyLinkBtn');
+  const roomInput = $('#roomInput'), onlineStatus = $('#onlineStatus'), peerIdEl = $('#peerId');
+  const boardEl = $('#board'), turnEl = $('#turn'), resetBtn = $('#resetBtn');
+  const shopGrid = $('#shopGrid'), invList = $('#invList');
+
+  // Nick prompt immediately
+  function askNick(){
+    let n = prompt('Введите ник', STATE.nick || ('Игрок' + Math.floor(Math.random()*900+100)));
+    if(!n || !n.trim()) n = 'Guest' + Math.floor(Math.random()*900+100);
+    STATE.nick = n.trim();
+    saveLocal();
+    nickText.textContent = STATE.nick;
+  }
+  askNick();
+
+  // Tabs
+  function setTabs(){
+    function clear(){ [tabBattle,tabShop,tabInv].forEach(t=>t.classList.remove('active')); [paneBattle,paneShop,paneInv].forEach(p=>p.style.display='none'); }
+    tabBattle.onclick = ()=>{ clear(); tabBattle.classList.add('active'); paneBattle.style.display='block'; };
+    tabShop.onclick = ()=>{ clear(); tabShop.classList.add('active'); paneShop.style.display='block'; };
+    tabInv.onclick = ()=>{ clear(); tabInv.classList.add('active'); paneInv.style.display='block'; };
+    tabBattle.click();
+  }
+  setTabs();
+
+  // Board logic
+  function initBoard(){
+    const b = Array.from({length:8}, ()=>Array.from({length:8}, ()=>null));
+    for(let r=0;r<3;r++) for(let c=0;c<8;c++) if((r+c)%2===1) b[r][c] = { color:'black', king:false };
+    for(let r=5;r<8;r++) for(let c=0;c<8;c++) if((r+c)%2===1) b[r][c] = { color:'white', king:false };
+    STATE.board = b; STATE.turn = 'white'; STATE.selected = null; STATE.moves = [];
+  }
+  function cloneBoard(b){ return b.map(row => row.map(cell => cell ? {...cell} : null)); }
+  function within(n){ return n>=0 && n<8; }
+  function getMovesFor(r,c){
+    const piece = STATE.board[r][c]; if(!piece) return [];
+    const dirs = piece.king ? [[1,1],[1,-1],[-1,1],[-1,-1]] : (piece.color==='white'? [[-1,-1],[-1,1]]:[[1,-1],[1,1]]);
+    const moves = [];
+    for(const [dr,dc] of dirs){
+      const nr=r+dr,nc=c+dc;
+      if(within(nr)&&within(nc)&&!STATE.board[nr][nc]) moves.push({to:[nr,nc], capture:null});
+      const jr=r+2*dr, jc=c+2*dc, mr=r+dr, mc=c+dc;
+      if(within(jr)&&within(jc)&&STATE.board[mr][mc]&&STATE.board[mr][mc].color!==piece.color&&!STATE.board[jr][jc]) moves.push({to:[jr,jc], capture:[mr,mc]});
+    }
+    return moves;
+  }
+  function applyMove(from,to){
+    const b = cloneBoard(STATE.board);
+    const piece = b[from[0]][from[1]]; if(!piece) return;
+    b[from[0]][from[1]] = null;
+    if(Math.abs(to[0]-from[0])===2){ const mr=(from[0]+to[0])/2, mc=(from[1]+to[1])/2; b[mr][mc] = null; }
+    b[to[0]][to[1]] = {...piece};
+    if(!piece.king){
+      if(piece.color==='white' && to[0]===0) b[to[0]][to[1]].king = true;
+      if(piece.color==='black' && to[0]===7) b[to[0]][to[1]].king = true;
+    }
+    STATE.board = b;
+  }
+
+  // Render board
+  function renderBoard(){
+    boardEl.innerHTML = '';
+    for(let r=0;r<8;r++){
+      for(let c=0;c<8;c++){
+        const dark = (r+c)%2===1;
+        const sq = document.createElement('div');
+        sq.className = 'square ' + (dark ? 'dark' : 'light');
+        sq.addEventListener('click', ()=>onCellClick(r,c));
+        const cell = STATE.board[r][c];
+        if(cell){
+          const p = document.createElement('div');
+          p.className = 'piece ' + (cell.color==='white' ? 'white' : 'black') + (cell.king ? ' king' : '');
+          // choose skin: local mapping or default active skin
+          let skinId = STATE.activeSkin || STATE.skins[0].id;
+          if(STATE.localSkinMap && STATE.localSkinMap[cell.color]) skinId = STATE.localSkinMap[cell.color];
+          const skinObj = STATE.skins.find(s=>s.id===skinId) || STATE.skins[0];
+          p.style.background = skinObj.preview;
+          p.dataset.effect = skinObj.effect;
+          if(cell.king) p.textContent = '♔';
+          if(['Legend','Elite'].includes(skinObj.rarity)) p.style.boxShadow = "0 12px 34px rgba(255,215,0,0.18)";
+          sq.appendChild(p);
+        }
+        if(STATE.moves.some(m=>m.to[0]===r && m.to[1]===c)){
+          const dot = document.createElement('div'); dot.className = 'move-dot'; sq.appendChild(dot);
+        }
+        if(STATE.selected && STATE.selected[0]===r && STATE.selected[1]===c){
+          sq.style.boxShadow = 'inset 0 8px 26px rgba(79,70,229,0.12)';
+        }
+        boardEl.appendChild(sq);
+      }
+    }
+    turnEl.textContent = STATE.turn;
+    peerIdEl.textContent = STATE.peerId || '—';
+    $('#onlineStatus').textContent = (STATE.conn && STATE.conn.open) ? 'Connected' : 'Idle';
+    balanceVal.textContent = `${STATE.currency}${STATE.balance.toFixed(2)}`;
+  }
+
+  // Cell click
+  function onCellClick(r,c){
+    const cell = STATE.board[r][c];
+    if(STATE.selected){
+      const mv = STATE.moves.find(m=>m.to[0]===r && m.to[1]===c);
+      if(mv){
+        const from = STATE.selected, to = [r,c];
+        if(!STATE.conn || STATE.role==='host'){
+          applyMove(from,to);
+          STATE.turn = (STATE.turn === 'white') ? 'black' : 'white';
+          renderBoard();
+          if(STATE.conn && STATE.role==='host') broadcast({ type:'state', payload: snapshot() });
+          if(!STATE.conn) setTimeout(()=>botMoveIfNeeded(), 350);
+        } else {
+          send({ type:'move', payload:{ from, to }});
+        }
+        animateEffect(from,to);
+      }
+      STATE.selected = null; STATE.moves = []; renderBoard();
+      return;
+    }
+    if(cell && cell.color === STATE.turn){
+      STATE.selected = [r,c]; STATE.moves = getMovesFor(r,c); renderBoard();
+    }
+  }
+
+  // Simple bot
+  function botMoveIfNeeded(){
+    const color = STATE.turn;
+    const all = [];
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const piece = STATE.board[r][c];
+      if(piece && piece.color === color){
+        const ms = getMovesFor(r,c);
+        for(const m of ms) all.push({ from:[r,c], to:m.to });
+      }
+    }
+    if(all.length===0) return;
+    const pick = all[Math.floor(Math.random()*all.length)];
+    applyMove(pick.from, pick.to);
+    STATE.turn = (STATE.turn === 'white') ? 'black' : 'white';
+    renderBoard();
+  }
+
+  // animate
+  function animateEffect(from,to){
+    const idxFrom = from[0]*8 + from[1], idxTo = to[0]*8 + to[1];
+    const elTo = boardEl.children[idxTo];
+    if(!elTo) return;
+    const piece = elTo.querySelector('.piece');
+    if(!piece) return;
+    const eff = piece.dataset.effect;
+    if(eff === 'glow') piece.animate([{boxShadow:'0 8px 22px rgba(124,58,237,0)'},{boxShadow:'0 16px 44px rgba(124,58,237,0.36)'},{boxShadow:'0 8px 22px rgba(124,58,237,0)'}],{duration:900});
+    else if(eff === 'glow-trail' || eff==='golden-trail') piece.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:800});
+    else if(eff === 'sparkle') piece.animate([{transform:'translateY(0)'},{transform:'translateY(-6px)'},{transform:'translateY(0)'}],{duration:700});
+    else if(eff === 'royal') piece.animate([{transform:'scale(1)'},{transform:'scale(1.08)'},{transform:'scale(1)'}],{duration:900});
+    else if(eff === 'ethereal') piece.animate([{opacity:0.7, filter:'blur(0px)'},{opacity:1, filter:'blur(1px)'},{opacity:0.9}],{duration:900});
+  }
+
+  // P2P (PeerJS) — rooms via ?room=<peerId>
+  function initPeer(autoRoomId){
+    try{ if(STATE.peer) STATE.peer.destroy(); }catch(e){}
+    const peer = new Peer(undefined, { debug:0 });
+    STATE.peer = peer;
+    peer.on('open', id => {
+      STATE.peerId = id; $('#peerId').textContent = id; $('#onlineStatus').textContent = 'Готов';
+      if(autoRoomId && autoRoomId !== id) connectTo(autoRoomId);
+    });
+    peer.on('connection', c => {
+      if(STATE.conn){ c.close(); return; }
+      STATE.conn = c; setupConn(c); STATE.role = 'host';
+      $('#onlineStatus').textContent = 'Игрок подключился';
+      send({ type:'state', payload: snapshot() });
+      send({ type:'meta', payload: { nick: STATE.nick, skin: STATE.activeSkin, role:'host' } });
+    });
+    peer.on('error', err => { $('#onlineStatus').textContent = 'Peer err: ' + String(err); });
+  }
+
+  function setupConn(c){
+    c.on('open', ()=> { $('#onlineStatus').textContent = 'Соединение открыто'; });
+    c.on('data', d => handleRemote(d));
+    c.on('close', ()=> { $('#onlineStatus').textContent = 'Соединение закрыто'; STATE.conn = null; STATE.role='host'; });
+  }
+
+  function connectTo(id){
+    if(!STATE.peer) initPeer();
+    const c = STATE.peer.connect(id, { reliable:true });
+    STATE.conn = c; STATE.role = 'guest';
+    setupConn(c);
+    $('#onlineStatus').textContent = 'Подключение к ' + id + '...';
+    c.on('open', ()=> { $('#onlineStatus').textContent = 'Подключено как гость. Ожидаем состояние.'; send({ type:'meta', payload:{ nick: STATE.nick, skin: STATE.activeSkin, role:'guest' } }); });
+  }
+
+  function send(msg){ try{ if(STATE.conn && STATE.conn.open) STATE.conn.send(msg); }catch(e){} }
+  function broadcast(msg){ send(msg); }
+
+  function handleRemote(msg){
+    if(!msg || !msg.type) return;
+    if(msg.type === 'state' && msg.payload){
+      const s = msg.payload; STATE.board = s.board; STATE.turn = s.turn; renderBoard(); $('#onlineStatus').textContent = 'Синхронизировано';
+    }
+    if(msg.type === 'move' && msg.payload && STATE.role === 'host'){
+      const { from, to } = msg.payload;
+      const allowed = getMovesFor(from[0], from[1]);
+      const ok = allowed.some(m => m.to[0]===to[0] && m.to[1]===to[1]);
+      if(ok){ applyMove(from,to); STATE.turn = (STATE.turn==='white')?'black':'white'; broadcast({ type:'state', payload: snapshot() }); renderBoard(); } else { $('#onlineStatus').textContent = 'Некорректный ход'; }
+    }
+    if(msg.type === 'meta' && msg.payload){
+      const meta = msg.payload;
+      if(meta.role === 'host'){ STATE.localSkinMap.black = meta.skin || STATE.activeSkin; } else { STATE.localSkinMap.white = meta.skin || STATE.activeSkin; }
+      $('#onlineStatus').textContent = 'Игрок: ' + (meta.nick || '—');
+    }
+  }
+
+  function snapshot(){ return { board: STATE.board, turn: STATE.turn }; }
+
+  // Shop / inventory UI
+  function renderShop(){
+    shopGrid.innerHTML = '';
+    for(const s of STATE.skins){
+      const card = document.createElement('div'); card.className = 'skin-card';
+      const left = document.createElement('div'); left.style.display='flex'; left.style.gap='8px'; left.style.alignItems='center';
+      const preview = document.createElement('div'); preview.className='skin-preview'; preview.style.background = s.preview;
+      left.appendChild(preview);
+      left.appendChild(Object.assign(document.createElement('div'), { innerHTML:`<div style="font-weight:800;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}</div><div style="font-size:12px;color:var(--muted)">${s.rarityLabel} • $${s.price.toFixed(2)}</div>` }));
+      card.appendChild(left);
+      const right = document.createElement('div'); right.style.display='flex'; right.style.flexDirection='column'; right.style.alignItems='flex-end'; right.style.gap='6px';
+      const rarity = document.createElement('div'); rarity.className = 'rarity ' + (s.rarityClass || 'rar-Common'); rarity.textContent = s.rarity;
+      right.appendChild(rarity);
+      const btn = document.createElement('button'); btn.className = 'wood-btn'; btn.style.padding='6px 10px';
+      if(STATE.owned.has(s.id)){
+        btn.textContent = (STATE.activeSkin === s.id) ? 'Надето' : 'Надеть';
+        btn.onclick = ()=>{ STATE.activeSkin = s.id; saveLocal(); renderShop(); renderInv(); renderBoard(); sendMetaIfConnected(); };
+        if(STATE.activeSkin === s.id){ btn.style.background = 'linear-gradient(180deg,#4f46e5,#7c3aed)'; btn.style.color='#fff'; }
+      } else {
+        btn.textContent = 'Купить';
+        btn.onclick = ()=>{ if(STATE.balance < s.price){ alert('Недостаточно средств'); return; } STATE.balance -= s.price; STATE.owned.add(s.id); STATE.activeSkin = s.id; saveLocal(); renderShop(); renderInv(); renderBoard(); updateBalanceUI(); sendMetaIfConnected(); }
+      }
+      right.appendChild(btn);
+      card.appendChild(right);
+      shopGrid.appendChild(card);
+    }
+  }
+
+  function renderInv(){
+    invList.innerHTML = '';
+    const ownedArr = Array.from(STATE.owned);
+    if(ownedArr.length === 0){
+      invList.innerHTML = '<div style="padding:12px;color:var(--muted)">Инвентарь пуст. Купи скины в магазине.</div>';
+      return;
+    }
+    for(const id of ownedArr){
+      const s = STATE.skins.find(x=>x.id===id);
+      if(!s) continue;
+      const card = document.createElement('div'); card.className='skin-card';
+      const left = document.createElement('div'); left.style.display='flex'; left.style.gap='8px'; left.style.alignItems='center';
+      const preview = document.createElement('div'); preview.className='skin-preview'; preview.style.background = s.preview;
+      left.appendChild(preview);
+      left.appendChild(Object.assign(document.createElement('div'), { innerHTML:`<div style="font-weight:800">${s.name}</div><div style="font-size:12px;color:var(--muted)">${s.rarityLabel}</div>` }));
+      card.appendChild(left);
+      const right = document.createElement('div'); right.style.display='flex'; right.style.flexDirection='column'; right.style.alignItems='flex-end';
+      const wearBtn = document.createElement('button'); wearBtn.className='wood-btn'; wearBtn.textContent = (STATE.activeSkin === s.id) ? 'Надето' : 'Надеть';
+      wearBtn.onclick = ()=>{ STATE.activeSkin = s.id; saveLocal(); renderInv(); renderShop(); renderBoard(); sendMetaIfConnected(); };
+      if(STATE.activeSkin === s.id){ wearBtn.style.background = 'linear-gradient(180deg,#4f46e5,#7c3aed)'; wearBtn.style.color='#fff'; }
+      right.appendChild(wearBtn);
+      card.appendChild(right);
+      invList.appendChild(card);
+    }
+  }
+
+  function sendMetaIfConnected(){
+    if(STATE.conn && STATE.conn.open){
+      send({ type:'meta', payload: { nick: STATE.nick, skin: STATE.activeSkin, role: STATE.role } });
+    }
+  }
+
+  // Controls wiring
+  $('#btnOffline').onclick = () => {
+    onlineControls.style.display = 'none';
+    initBoard(); renderBoard();
+    if(STATE.conn && STATE.conn.close) { try{ STATE.conn.close(); }catch(e){} } STATE.conn = null; $('#onlineStatus').textContent = 'Offline';
+  };
+  $('#btnOnline').onclick = () => { onlineControls.style.display = ''; initPeerAuto(); };
+
+  $('#createRoom').onclick = () => {
+    initPeer();
+    const iv = setInterval(()=>{
+      if(STATE.peerId){
+        clearInterval(iv);
+        const url = location.origin + location.pathname + '?room=' + encodeURIComponent(STATE.peerId);
+        history.replaceState(null, '', '?room=' + encodeURIComponent(STATE.peerId));
+        $('#onlineStatus').textContent = 'Комната создана — отправь ссылку';
+        try{ navigator.clipboard.writeText(url); $('#copyLinkBtn').textContent = 'Ссылка скопирована'; setTimeout(()=>$('#copyLinkBtn').textContent='📋',1400); }catch(e){}
+      }
+    },200);
+  };
+
+  $('#copyLinkBtn').onclick = async () => {
+    if(!STATE.peerId){ alert('Сначала создайте комнату'); return; }
+    const url = location.origin + location.pathname + '?room=' + encodeURIComponent(STATE.peerId);
+    try{ await navigator.clipboard.writeText(url); $('#copyLinkBtn').textContent = 'Скопировано'; setTimeout(()=>$('#copyLinkBtn').textContent='📋',1200); }catch(e){ alert('Не удалось скопировать'); }
+  };
+
+  $('#joinRoom').onclick = () => {
+    const v = roomInput.value.trim();
+    if(!v) { alert('Введите ID комнаты или ссылку'); return; }
+    const m = v.match(/[?&]room=([^&]+)/);
+    const id = m ? decodeURIComponent(m[1]) : v;
+    connectTo(id);
+  };
+
+  $('#resetBtn').onclick = () => { initBoard(); renderBoard(); if(STATE.role === 'host' && STATE.conn && STATE.conn.open) broadcast({ type:'state', payload: snapshot() }); };
+
+  function updateBalanceUI(){ balanceVal.textContent = `${STATE.currency}${STATE.balance.toFixed(2)}`; saveLocal(); }
+
+  // Init on load
+  function init(){
+    if(!STATE.activeSkin) STATE.activeSkin = STATE.skins[0].id;
+    // default owned first skin
+    if(STATE.owned.size === 0){ STATE.owned.add(STATE.skins[0].id); STATE.activeSkin = STATE.skins[0].id; saveLocal(); }
+    renderShop(); renderInv(); initBoard(); renderBoard(); updateBalanceUI();
+    // if there is ?room param at open, auto-init Peer and connect
+    initPeerAuto();
+  }
+
+  function initPeerAuto(){
+    const u = new URL(location.href); const r = u.searchParams.get('room'); if(r) initPeer(r);
+  }
+
+  // Start
+  init();
+
+  // Save periodically
+  setInterval(saveLocal, 2000);
+
+  // Cleanup
+  window.addEventListener('beforeunload', ()=>{ try{ STATE.peer && STATE.peer.destroy(); }catch(e){} });
+
+  // Expose small debug
+  window.CHECKOUT = { STATE, renderBoard, initBoard, renderShop };
+
+})(); // IIFE end
+</script>
+
+</body>
+</html>
